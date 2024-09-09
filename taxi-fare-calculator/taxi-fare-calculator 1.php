@@ -22,8 +22,6 @@ class MyPlugin
 
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_shortcode('FareTaxi-Calculator', array($this, 'fare_taxi_calculator_shortcode'));
-         // Add the delete action hook
-       add_action('admin_init', array($this, 'handle_delete_action'));
     }
     public function enqueue_styles()
     {
@@ -99,23 +97,7 @@ class MyPlugin
     {
         echo do_shortcode('[FareTaxi-Calculator]');
     }
-   // Handle the delete action
-    public function handle_delete_action()
-	{
-	    if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['listid'])) {
-		global $wpdb;
 
-		// Validate and sanitize the input
-		$list_id = intval($_GET['listid']);
-
-		// Delete the entry from the database
-		$wpdb->delete($this->table_name, array('id' => $list_id));
-
-		// Redirect to avoid repeated action on refresh
-		wp_redirect(admin_url('admin.php?page=taxi-fare'));
-		exit;
-	    }
-	}
     // other plugin support functions settings and form
     function fare_taxi_calculator_shortcode($atts, $content = "")
     {
@@ -278,12 +260,6 @@ class MyPlugin
                 color: green;
             }
             .total-cost span{color:#1e4278}
-            .error-message{
-            	text-align:center;     
-            	font-size: 18px;
-		color: red;
-		font-weight: bold;
-	    }
         </style>
         <div  style="padding: 10px;">
             <form class="taxi-calculator" action="" method="post">
@@ -371,7 +347,6 @@ class MyPlugin
 
             if ($_POST['taxi_calculator']) {
                 $costper_hour = esc_attr(get_option('cost_per_hour'));
-                $fix_price_3hour = esc_attr(get_option('fix_price'));
                 $garage_address = esc_attr(get_option('garage_address'));
                 if (!$costper_hour) {
                     echo "<p class='red'>Cost per hour is required<p>";
@@ -391,34 +366,30 @@ class MyPlugin
                 $start = strtotime($starting_time);
                 $end = strtotime($dropp_time);
                 $customer_driving_mins = ($end - $start) / 60;
-                
                 $costper_hour_inminuts = $costper_hour / 60;
                 // Create the API request URL
-                $garage_to_starting = $this->google_metrix_api($gaddress, $origin,$start);
+                $garage_to_starting = $this->google_metrix_api($gaddress, $origin);
                 
-                $dropp_to_garage = $this->google_metrix_api($destination, $gaddress,$start);
+                $dropp_to_garage = $this->google_metrix_api($destination, $gaddress);
 
-                if (isset($garage_to_starting['error'])) {
-		    echo "<div class='error-message'><p>Error: " . $garage_to_starting['error'] . "</p></div>";
-		} elseif (isset($dropp_to_garage['error'])) {
-		    echo "<div class='error-message'><p>Error: " . $dropp_to_garage['error'] . "</p></div>";
-		} elseif ($garage_to_starting && $dropp_to_garage) {
-                    $garatostart = round($garage_to_starting['value'] / 60);                    
+                if ($garage_to_starting && $dropp_to_garage) {
+                    $garatostart = round($garage_to_starting['value'] / 60);
                     $droptogarage = round($dropp_to_garage['value'] / 60);
                     
-                    $total_time = $garatostart + $droptogarage + $customer_driving_mins;//+45
+                    $minuts_extra_total = $garatostart + $droptogarage; + 45
                     
                     echo '<div class="total-cost"><h1>';
-                    if ($total_time > 180) {
-                        $total_time_after3_hour=$total_time-180+30;
-                        $after_3hour_coast = number_format((float)($total_time_after3_hour * $costper_hour_inminuts), 2, '.', '');
-                        echo '<span>Total Cost : </span>' . $fix_price_3hour+$after_3hour_coast . ' euro';
+                    if ($customer_driving_mins > 180) {
+                        $total_coast = number_format((float)($customer_driving_mins * $costper_hour_inminuts), 2, '.', '');
+                        echo '<span>Total Cost : </span>' . $total_coast . ' euro';
                     } else {
-                        //$total_coast = number_format((float)(180  * $costper_hour_inminuts), 2, '.', '');
-                        echo '<span>Total Cost : </span>' . $fix_price_3hour . ' euro';
+                        $total_coast = number_format((float)(180 * $costper_hour_inminuts), 2, '.', '');
+                        echo '<span>Total Cost : </span>' . $total_coast . ' euro';
                     }
-                    
-                  //echo '</div></h1>';
+                    echo "</h1>
+                           <p style='text-align: center;'>Total time : $minuts_total minuts</p>
+                         </div>";
+
                     // save this info to database
                     global $wpdb;
                     $table_name = $wpdb->prefix . "fare_taxi_data";
@@ -436,22 +407,18 @@ class MyPlugin
                         'date'    => date('Y-m-d H:i:s'),
                     );
                     $wpdb->insert($table_name, $data);
-                }else {
-		    echo "<div class='error-message'><p>Unable to calculate the total cost. Please try again.</p></div>";
-		}
+                }
             } ?>
         </div>
     <?php return ob_get_clean();
     }
 
-    function google_metrix_api($origin, $destination,$departure_time)
+    function google_metrix_api($origin, $destination)
     {
-    
         // Replace 'YOUR_API_KEY' with your actual Google Maps API key
         $conf_apikey = esc_attr(get_option('google_api_key'));
         $apiKey =  $conf_apikey ? $conf_apikey : 'AIzaSyA5do7bjm6wBjq7g5sygsKGBytsdKcawQc';
-        //$url = "https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=$apiKey";
-        $url = "https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=$apiKey&departure_time=$departure_time&mode=driving&traffic_model=best_guess";
+        $url = "https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=$apiKey";
 
         // Initialize cURL session
         $curl = curl_init();
@@ -463,20 +430,25 @@ class MyPlugin
         // Close cURL session
         curl_close($curl);
         // Decode JSON response
-        //echo "<pre>";
-        //echo $response;
         $data = json_decode($response, true);
         //print_r($data['routes']);
-       
+
+        // Extracting the duration in traffic
+
+        // Close cURL session
+        curl_close($curl);
+        // Decode JSON response
+        $data = json_decode($response, true);
+        //print_r($data['routes']);
+
         // Extracting the duration in traffic
         if ($data['status'] == 'OK') {
             $duration_in_traffic = isset($data['routes'][0]['legs'][0]['duration_in_traffic']) ? $data['routes'][0]['legs'][0]['duration_in_traffic'] : '';
             $duraton = $data['routes'][0]['legs'][0]['duration'];
             return $duration_in_traffic ? $duration_in_traffic : $duraton;
-            
         } else {
-	  return ['error' => isset($data['error_message']) ? $data['error_message'] : 'Unknown error'];
-    	}
+            return false;
+        }
     }
     function test_input($data)
     {
@@ -491,9 +463,6 @@ class MyPlugin
     {
     ?>
         <div class="wrap">
-        <style>
-        .col-md-6{margin-bottom:15px;}
-        </style>
             <h2>Plugin Settings</h2>
             <form method="post" action="">
                 <!-- Add your form fields here -->
@@ -501,19 +470,12 @@ class MyPlugin
                     <div class="col-md-6">
                         <label for="setting1">Garage Address :</label>
                         <input type="text" name="garage_address" class="form-control" value="<?php echo esc_attr(get_option('garage_address')); ?>" />
-                        
+                        <br> <br>
                     </div>
-                    <br>
-                    <div class="col-md-6">
-                        <label for="setting2">Fix price(euro) :</label>
-                        <input type="number" name="fix_price" class="form-control" value="<?php echo esc_attr(get_option('fix_price')); ?>" />
-                    </div>
-                    <br>
                     <div class="col-md-6">
                         <label for="setting2">Cost Per Hour(euro) :</label>
                         <input type="number" name="cost_per_hour" class="form-control" value="<?php echo esc_attr(get_option('cost_per_hour')); ?>" />
                     </div>
-                    <br>
                     <div class="col-md-6">
                         <label for="setting2">Google api key :</label>
                         <input type="text" name="google_api_key" class="form-control" value="<?php echo esc_attr(get_option('google_api_key')); ?>" />
@@ -538,14 +500,14 @@ class MyPlugin
     {
         // Validate and sanitize form data
         $setting1 = sanitize_text_field($_POST['garage_address']);
-        $setting2 = sanitize_text_field($_POST['cost_per_hour']);        
+        $setting2 = sanitize_text_field($_POST['cost_per_hour']);
         $setting3 = sanitize_text_field($_POST['google_api_key']);
-        $setting4 = sanitize_text_field($_POST['fix_price']);
+
         // Save the data to the options table
         update_option('garage_address', $setting1);
         update_option('cost_per_hour', $setting2);
         update_option('google_api_key', $setting3);
-        update_option('fix_price', $setting4);
+
         // Add more update_option calls for additional settings
 
         // Optionally, redirect the user or display a success message

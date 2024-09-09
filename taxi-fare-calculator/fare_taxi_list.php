@@ -77,14 +77,23 @@ class Custom_List_Table extends WP_List_Table
         if ($column_name === 'status') {
             $user_id = $item['id']; // Assuming the user's ID is stored in $item['ID']
             //$edit_url = admin_url('admin.php?page=info_icon_domains_list&action=edit&listid=' . $user_id); // Adjust 'send_invoice' to match your page slug
-            $del_url = admin_url('admin.php?page=info_icon_fare_taxi_list&action=delete&listid=' . $user_id); // Adjust 'send_invoice' to match your page slug
-            $actions = array(
-                //'edit' => sprintf('<span class="edit"><a href="%s" >Edit</a></span>', esc_url($edit_url)),
-                'view' => sprintf('<span class="trash"><a href="%s" class="submitdelete">Delete</a></span>', esc_url($del_url)),
-            );
-            $item['status'] =  '';
+             // Update the page slug to match your main admin page
+		$del_url = admin_url('admin.php?page=taxi-fare&action=delete&listid=' . $user_id);
+		
+		$actions = array(
+		    'view' => sprintf('<span class="trash"><a href="%s" class="submitdelete">Delete</a></span>', esc_url($del_url)),
+		);
 
-            return $item[$column_name] . $this->row_actions($actions);
+		return $this->row_actions($actions);
+        
+            //$del_url = admin_url('admin.php?page=info_icon_fare_taxi_list&action=delete&listid=' . $user_id); // Adjust 'send_invoice' to match your page slug
+            //$actions = array(
+                //'edit' => sprintf('<span class="edit"><a href="%s" >Edit</a></span>', esc_url($edit_url)),
+                //'view' => sprintf('<span class="trash"><a href="%s" class="submitdelete">Delete</a></span>', esc_url($del_url)),
+            //);
+            //$item['status'] =  '';
+
+            //return $item[$column_name] . $this->row_actions($actions);
         } else {
             return $item[$column_name];
         }
@@ -118,4 +127,7 @@ class Custom_List_Table extends WP_List_Table
     {
         echo 'No custom items found.';
     }
+    
+
+
 }
